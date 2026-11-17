@@ -26,7 +26,7 @@ python main.py transcribe_bookmarks <ASIN>
 python -m unittest discover -s tests       # unit tests, no extra packages
 ```
 
-System tools: `ffmpeg` and `jq` (Homebrew on macOS).
+System tools: `ffmpeg` and `jq` (Homebrew on macOS). Python 3.13 or 3.14, built with the `lzma` module (Parakeet needs it; pyenv builds lack it unless `xz` was installed first).
 
 ## Layout
 
@@ -50,6 +50,8 @@ System tools: `ffmpeg` and `jq` (Homebrew on macOS).
 - Run external programs with an argument list (`subprocess.run([...])`), never `shell=True`.
 - Pin new dependencies to exact versions in `requirements.txt`. Engine-specific packages go in their own `requirements-<engine>.txt`, and are imported only inside that engine's backend.
 - Never edit `audible-convert.sh` while a transcription run is in progress: bash reads scripts from disk as it runs, so an edit corrupts the running job.
+- Runs are incremental and must stay that way: `audible-convert.sh` re-fetches annotations every run (audible-cli would otherwise keep a stale file) but skips the book download and re-encode when files exist; clips already cut are not re-cut; clips already transcribed are not re-transcribed.
+- Before upgrading a pinned dependency, read the comments in the requirements files (e.g. `av` is held at 18.x for faster-whisper).
 - Transcribed notes are a JSON object keyed by clip start position in milliseconds (as a string). Always write it through `sort_notes` so it stays in book order, and keep the format backward compatible with existing files.
 
 ## Security rules

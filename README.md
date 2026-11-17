@@ -16,7 +16,10 @@ This is a small tool for [Audible](https://audible.com) users to easily extract 
 Follow these steps to get started.
 
 ### Clone this repo.
-
+```
+git clone https://github.com/mayankdang/audible-bookmark-transcriber.git
+cd audible-bookmark-transcriber
+```
 
 ### Install the necessary dependencies.
 1. `ffmpeg` (if you need to install `brew`, follow the instructions [here](https://brew.sh/))
@@ -27,7 +30,7 @@ brew install ffmpeg
 ```
 brew install jq
 ```  
-3. The Python dependencies. A virtual environment keeps them separate from the rest of your system:
+3. The Python dependencies (tested with Python 3.13 and 3.14). A virtual environment keeps them separate from the rest of your system:
 ```
 python3 -m venv .venv
 source .venv/bin/activate
@@ -40,7 +43,7 @@ pip install -r requirements.txt
 | NVIDIA Parakeet (recommended free option) | `pip install -r requirements-parakeet.txt` | Apple Silicon Macs, using the GPU | about 2.5 GB | under 1 second |
 | Whisper (large-v3-turbo) | `pip install -r requirements-whisper.txt` | Any computer; on a Mac it uses the CPU | about 1.6 GB | about 10 seconds |
 
-\*Measured on an M1 Pro. On test clips, both matched the OpenAI API's transcription almost word for word; the differences were mostly character names.
+\*Measured on an M1 Pro. On test clips, Parakeet matched the OpenAI API's transcription almost word for word (it misheard one character's name). Whisper was close too, but occasionally cut a word short at the end of a clip.
 
 With a local engine, your audio never leaves your computer. The model downloads from Hugging Face the first time you transcribe and is then reused from Hugging Face's shared cache (`~/.cache/huggingface/hub`), so other projects can use it too. To free the space later:
 ```
@@ -102,16 +105,16 @@ where `<ASIN>` is the book ID you want to use.
 
 ### Wait for the code to run
 It will take a while. Basically the code performs the following steps:
-1. Download the original audio book file, remove the DRM using your Audible user credential, and save it as a `.mp4` file.
+1. Download the original audio book file, remove the DRM using your Audible user credential, and save it as a `.mp4` file. This is skipped if the book was already downloaded and converted.
 > [!IMPORTANT]
 > Anti-Piracy Notice
 > 
 > Please only use these tools for gaining full access to your own ebooks for archiving/conversion/convenience. De-drmed ebooks should not be uploaded to open servers, torrents, or other methods of mass distribution. No help will be given to people doing such things. Authors, retailers and publishers all need to make a living, so that they can continue to produce books for us to read. Don’t be a parasite.
 > 
-> The converted `.mp4` file is only meant for your personal use. DO NOT distribute! After the code finish running, you should delete this file to avoid leaks.
+> The converted `.mp4` file is only meant for your personal use. DO NOT distribute! After the code finishes running, you should delete this file to avoid leaks. (If you transcribe the same book again later, it is re-created from the downloaded original, which takes several minutes.)
 
-2. Extract the bookmarks you created for this book, specifically, the start and end time of each clip.
-3. Extract each clip as separate audio files.
+2. Fetch your current clips for this book from Audible, specifically the start and end time of each clip.
+3. Cut each clip out as a separate audio file.
 4. Transcribe the audio clips with the engine you chose.
 
 ### Completed.
@@ -119,7 +122,10 @@ The transcribed notes will be saved in this file: `data/audio/<ASIN>/transcribed
 
 Each note is keyed by where its clip starts in the book, in milliseconds, and the notes are listed in the order they occur in the book.
 
-Only clips are transcribed. Plain bookmarks (a single point in time, with no start and end) have no audio range, so they are skipped.
+Only clips are transcribed. Audible saves a bookmark alongside every clip you make, so those are covered; a bookmark added on its own marks a single moment with no audio range, so it is skipped.
+
+### Added more clips later?
+Run the same `transcribe_bookmarks` command again. It fetches your latest clips from Audible, reuses the downloaded book and the clips already cut, and only transcribes the new ones. Existing transcriptions are kept.
 
 ## Development
 Run the unit tests (no extra packages needed):

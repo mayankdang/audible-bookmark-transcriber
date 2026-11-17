@@ -31,6 +31,11 @@ else
     aax="--aaxc"
 fi
 
+# audible-cli keeps an existing annotations file instead of downloading a new
+# one, so clips added since the last run would be missed. Remove it first so
+# the current clips are always fetched. (The book itself is not re-downloaded.)
+rm -f "$dir"/*-annotations.json
+
 if ! audible download -a "$asin" "$aax" --cover --cover-size 1215 --chapter --annotation -o "$dir"; then
     echo "Error: audible download failed"
     exit 1

@@ -163,6 +163,9 @@ class AudibleManager:
                 print(f"Skipping clip at {clip.get('startPosition')}: it has no audio range.")
                 continue
             start_ms, duration_seconds = window
+            clip_path = os.path.join(audio_clips_dir, f"clip_{clip['startPosition']}.mp3")
+            if os.path.exists(clip_path):
+                continue  # cut on an earlier run
             result = subprocess.run(
                 [
                     "ffmpeg",
@@ -184,7 +187,7 @@ class AudibleManager:
                     "44100",
                     "-acodec",
                     "libmp3lame",
-                    os.path.join(audio_clips_dir, f"clip_{clip['startPosition']}.mp3"),
+                    clip_path,
                 ],
                 capture_output=True,
                 text=True,
@@ -193,6 +196,9 @@ class AudibleManager:
             if result.returncode != 0:
                 print(f"ffmpeg failed for clip at {format_time(start_ms)}:")
                 print(result.stderr.strip())
+                # Don't leave a partial file that later runs would treat as done.
+                if os.path.exists(clip_path):
+                    os.remove(clip_path)
 
     def _save_notes(self, path, notes):
         write_json(path, sort_notes(notes))

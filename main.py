@@ -45,7 +45,7 @@ def check_for_valid_configs():
     manager = AudibleManager(transcriber=transcriber)
     if not has_valid_configs(transcriber=transcriber, manager=manager):
         print(
-            "Please run `python main.py login` to authenticate to Audible and OpenAI."
+            "Please run `python main.py login` to sign in to Audible and choose a transcription engine."
         )
         return None, None
     return transcriber, manager
