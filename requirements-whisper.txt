@@ -1,0 +1,6 @@
+# Free, local transcription with Whisper via faster-whisper (any computer).
+# The model (about 1.6 GB) downloads from Hugging Face on first use.
+-r requirements.txt
+faster-whisper==1.2.1
+# faster-whisper 1.2.1 passes an option that av 19 removed.
+av==18.1.0

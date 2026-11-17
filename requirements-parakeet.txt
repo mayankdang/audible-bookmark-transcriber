@@ -1,0 +1,4 @@
+# Free, local transcription with NVIDIA Parakeet (Apple Silicon Macs only).
+# The model (about 2.5 GB) downloads from Hugging Face on first use.
+-r requirements.txt
+parakeet-mlx==0.7.0

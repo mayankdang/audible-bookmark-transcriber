@@ -1,9 +1,24 @@
 import os
+import platform
 import sys
 from getpass import getpass
 
 from audible_manager import AudibleManager
-from transcriber import Transcriber, load_saved_key, save_key
+from engines import (
+    ENGINES,
+    available_engines,
+    default_engine,
+    engine_from_config,
+    parse_engine_choice,
+)
+from transcriber import (
+    INSTALL_HINTS,
+    Transcriber,
+    is_installed,
+    load_config,
+    load_saved_key,
+    save_config,
+)
 from utils import is_yes, mask_key, secure_data_dir
 
 COUNTRY_CODES = {
@@ -22,7 +37,7 @@ COUNTRY_CODES = {
 
 
 def has_valid_configs(transcriber, manager):
-    return transcriber.client is not None and manager.auth is not None
+    return transcriber.is_configured and manager.auth is not None
 
 
 def check_for_valid_configs():
@@ -52,8 +67,26 @@ def ask_country_code():
     return country_code
 
 
+def ask_engine():
+    """Ask which transcription engine to use; Enter keeps the saved or free default."""
+    options = available_engines(platform.system(), platform.machine())
+    default = default_engine(engine_from_config(load_config()), options)
+
+    print("How should your clips be transcribed?")
+    for number, engine in enumerate(options, start=1):
+        marker = "  (default)" if engine == default else ""
+        print(f"  {number}. {ENGINES[engine]}{marker}")
+
+    while True:
+        answer = input("Enter a number, or press Enter for the default: ")
+        choice = parse_engine_choice(answer, options, default)
+        if choice:
+            return choice
+        print("Please enter one of the numbers above.")
+
+
 def ask_openai_key():
-    """Reuse the saved OpenAI key if the user wants to, otherwise ask for a new one."""
+    """Return the saved OpenAI key if the user wants it, otherwise a new one."""
     saved_key = load_saved_key()
     if saved_key:
         answer = input(
@@ -65,9 +98,12 @@ def ask_openai_key():
     key = ""
     while not key:
         key = getpass("Enter your OpenAI API key (input is hidden): ").strip()
-    save_key(key)
-    print("Saved the new OpenAI API key.")
     return key
+
+
+def print_install_hint(engine):
+    print(f"The {engine} engine isn't installed yet. Install it with:")
+    print(f"  {INSTALL_HINTS[engine]}")
 
 
 def login():
@@ -86,7 +122,14 @@ def login():
         if not manager.authenticate(username=username, country_code=country_code):
             return
 
-    manager.transcriber = Transcriber(openai_key=ask_openai_key())
+    engine = ask_engine()
+    openai_key = ask_openai_key() if engine == "openai" else None
+    save_config(engine, openai_key)
+    print(f"Transcription engine: {ENGINES[engine]}.")
+    if not is_installed(engine):
+        print_install_hint(engine)
+
+    manager.transcriber = Transcriber(engine=engine, openai_key=openai_key)
     manager.save_library()
     print("Login complete. Run `python main.py list` to see your books.")
 
@@ -98,6 +141,10 @@ def transcribe_bookmarks(asin):
     book = manager.get_book_by_asin(asin)
     if book is None:
         print("Book not found in library. Run `python main.py list` to refresh it.")
+        return
+    # Check before the long download, not after it.
+    if not is_installed(transcriber.engine):
+        print_install_hint(transcriber.engine)
         return
 
     print(f"Downloading book {book['title']}. This may take a few minutes.")

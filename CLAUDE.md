@@ -9,7 +9,7 @@ A small Python CLI that turns the clips you bookmark in Audible audiobooks into 
 1. Logs in to Audible through the user's browser and saves the session tokens locally.
 2. Downloads a book the user owns, removes the DRM with the user's own credentials, and saves it as an `.mp4`.
 3. Reads the book's annotations and cuts each clip out as an `.mp3` with `ffmpeg`.
-4. Sends each clip to OpenAI's Whisper API and saves the transcriptions, in book order, to `data/audio/<ASIN>/transcribed_notes.json`.
+4. Transcribes each clip with the engine chosen at login and saves the transcriptions, in book order, to `data/audio/<ASIN>/transcribed_notes.json`. Engines: OpenAI's Whisper API (paid), or locally and free with NVIDIA Parakeet (`parakeet-mlx`, Apple Silicon only) or Whisper (`faster-whisper`).
 
 It is only for books the user actually owns. Never add features meant for sharing or distributing DRM-free audio.
 
@@ -18,7 +18,9 @@ It is only for books the user actually owns. Never add features meant for sharin
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt            # pinned versions
-python main.py login                       # browser login + OpenAI key
+pip install -r requirements-parakeet.txt   # optional free engine (Apple Silicon)
+pip install -r requirements-whisper.txt    # optional free engine (any OS)
+python main.py login                       # browser login + choose engine
 python main.py list                        # refresh and print the library
 python main.py transcribe_bookmarks <ASIN>
 python -m unittest discover -s tests       # unit tests, no extra packages
@@ -33,7 +35,8 @@ System tools: `ffmpeg` and `jq` (Homebrew on macOS).
 | `main.py` | CLI entry point and prompts (login, list, transcribe_bookmarks). |
 | `audible_manager.py` | Audible login, library, download, clip extraction and transcription loop. |
 | `audible-convert.sh` | Downloads a book with `audible-cli` and decrypts/re-encodes it with `ffmpeg`. |
-| `transcriber.py` | OpenAI client and loading/saving the user's API key. |
+| `transcriber.py` | Engine backends (OpenAI, Parakeet, Whisper) and the saved engine/key config. Local engines are imported lazily so they stay optional. |
+| `engines.py` | Pure helpers: which engines run on this machine, defaults, parsing the login menu. |
 | `notes.py` | Pure helpers: pick clips from annotations, compute clip windows, sort notes. |
 | `utils.py` | Paths, time formatting, JSON and private-file helpers, subprocess environment. |
 | `tests/` | `unittest` tests for the pure helpers. |
@@ -45,7 +48,8 @@ System tools: `ffmpeg` and `jq` (Homebrew on macOS).
 - Write or update tests before changing core logic, and run the test suite before committing.
 - Build paths from the constants in `utils.py` (`PROJECT_DIR`, `DATA_DIR`, ...), never from `os.getcwd()`.
 - Run external programs with an argument list (`subprocess.run([...])`), never `shell=True`.
-- Pin new dependencies to exact versions in `requirements.txt`.
+- Pin new dependencies to exact versions in `requirements.txt`. Engine-specific packages go in their own `requirements-<engine>.txt`, and are imported only inside that engine's backend.
+- Never edit `audible-convert.sh` while a transcription run is in progress: bash reads scripts from disk as it runs, so an edit corrupts the running job.
 - Transcribed notes are a JSON object keyed by clip start position in milliseconds (as a string). Always write it through `sort_notes` so it stays in book order, and keep the format backward compatible with existing files.
 
 ## Security rules
@@ -57,7 +61,7 @@ This tool handles Amazon session tokens, a device private key, an OpenAI API key
 - Never print, log or echo tokens, API keys, Audible activation bytes or voucher keys. In `audible-convert.sh`, `$decrypt` contains a decryption key and must never be printed.
 - Never ask for or store the user's Amazon password. Login goes through the browser (`Authenticator.from_login_external`); the Amazon account needs 2FA turned on.
 - Don't commit real annotation files, transcripts, audio, library exports or logs, even as test fixtures. Use small made-up data in tests.
-- Don't add network calls other than to Amazon/Audible (via the `audible` libraries) and OpenAI.
+- Don't add network calls other than to Amazon/Audible (via the `audible` libraries), OpenAI (only when that engine is chosen) and Hugging Face (one-time model downloads for local engines). Local engines must not send audio anywhere.
 
 ## Git
 

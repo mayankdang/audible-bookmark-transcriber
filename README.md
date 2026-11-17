@@ -2,13 +2,13 @@
 
 ## Introduction
 
-This is a small tool for [Audible](https://audible.com) users to easily extract their bookmarks from the audio books as text. By default, it uses the state-of-the-art speech-to-text AI model called [Whisper by OpenAI](https://openai.com/index/whisper).
+This is a small tool for [Audible](https://audible.com) users to easily extract their bookmarks from the audio books as text. You can transcribe with [OpenAI's Whisper API](https://openai.com/index/whisper) (paid), or for free on your own computer with [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (Apple Silicon Macs) or [Whisper](https://github.com/SYSTRAN/faster-whisper).
 
 > [!IMPORTANT]
 > This tool is only meant to help users download and use the Audible books they **actually own**.
 
 ## Limitations
-- It only supports English books for now.
+- It only supports English books for now (the local Whisper engine can handle other languages, but this is untested).
 - Your Amazon account needs two-step verification (2FA) turned on to log in.
 - It has only been tested on MacOS. Linux will probably work, but Windows is unlikely.
 
@@ -33,9 +33,28 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+4. Optional: a free, local transcription engine, if you don't want to use the paid OpenAI API. Install the one you'll use:
+
+| Engine | Install | Runs on | Model download | Time per 30-second clip* |
+| --- | --- | --- | --- | --- |
+| NVIDIA Parakeet (recommended free option) | `pip install -r requirements-parakeet.txt` | Apple Silicon Macs, using the GPU | about 2.5 GB | under 1 second |
+| Whisper (large-v3-turbo) | `pip install -r requirements-whisper.txt` | Any computer; on a Mac it uses the CPU | about 1.6 GB | about 10 seconds |
+
+\*Measured on an M1 Pro. On test clips, both matched the OpenAI API's transcription almost word for word; the differences were mostly character names.
+
+With a local engine, your audio never leaves your computer. The model downloads from Hugging Face the first time you transcribe and is then reused from Hugging Face's shared cache (`~/.cache/huggingface/hub`), so other projects can use it too. To free the space later:
+```
+hf cache rm model/mlx-community/parakeet-tdt-0.6b-v2
+hf cache rm model/mobiuslabsgmbh/faster-whisper-large-v3-turbo
+```
+To keep models somewhere else, set the `HF_HOME` environment variable to another folder.
+
+> [!NOTE]
+> Parakeet needs Python's built-in `lzma` module. If you install Python with pyenv, run `brew install xz` *before* `pyenv install`, or Python is built without it. Check with `python -c "import lzma"`.
+
 Run the commands below with the virtual environment active.
 
-### Log in to your Audible account and provide an OpenAI API key
+### Log in to your Audible account and choose a transcription engine
 
 > [!IMPORTANT]
 > **Turn on two-step verification (2FA) on your Amazon account before logging in.** Without it, Amazon blocks the login. You can turn it on under Your Account → Login & Security → 2-Step Verification; an authenticator app works best.
@@ -56,9 +75,14 @@ It then prints a login URL:
 2. After you sign in, the browser shows a "Page not found" error. That's expected.
 3. Copy the full URL from the browser's address bar and paste it into the terminal.
 
-Finally it asks for your OpenAI API key (typing is hidden). If you don't have one, follow [the steps here](https://platform.openai.com/docs/quickstart). If a key is already saved, it asks whether to reuse it or enter a new one.
+Finally it asks how to transcribe your clips:
+1. **OpenAI Whisper API**: paid per minute of audio. It asks for your OpenAI API key (typing is hidden); if a key is already saved, it asks whether to reuse it or enter a new one. If you don't have a key, follow [the steps here](https://platform.openai.com/docs/quickstart).
+2. **NVIDIA Parakeet**: free, runs on your Mac. Only offered on Apple Silicon Macs, where it's the default.
+3. **Whisper**: free, runs on your computer.
 
-You can run `python main.py login` again at any time to change the saved OpenAI key; it won't ask you to sign in to Amazon again. To switch Amazon accounts, delete `data/audible_configs` first.
+Press Enter to keep the default.
+
+You can run `python main.py login` again at any time to switch engines or change the saved OpenAI key; it won't ask you to sign in to Amazon again. To switch Amazon accounts, delete `data/audible_configs` first.
 
 Your Amazon login tokens and OpenAI key are saved under `data/`, which is excluded from git and readable only by your user account. Never commit or share that folder.
 
@@ -88,7 +112,7 @@ It will take a while. Basically the code performs the following steps:
 
 2. Extract the bookmarks you created for this book, specifically, the start and end time of each clip.
 3. Extract each clip as separate audio files.
-4. Call the Whisper API to transcribe the audio clips.
+4. Transcribe the audio clips with the engine you chose.
 
 ### Completed.
 The transcribed notes will be saved in this file: `data/audio/<ASIN>/transcribed_notes.json`.
