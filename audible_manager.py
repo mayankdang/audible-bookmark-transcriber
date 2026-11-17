@@ -4,6 +4,7 @@ import toml
 import json
 import subprocess
 import math
+import readline  # noqa: F401 - lets macOS terminals accept the long login URL paste
 from utils import format_time
 
 
@@ -67,7 +68,7 @@ class AudibleManager:
             all_clips = json.load(f)["payload"]["records"]
         return [record for record in all_clips if record.get("type") == "audible.clip"]
 
-    def authenticate(self, username, password, country_code):
+    def authenticate(self, username, country_code):
         """
         Authenticate the user with the Audible API and store the credentials in a file.
         """
@@ -83,8 +84,10 @@ class AudibleManager:
             self.auth = audible.Authenticator.from_file(self.auth_file)
         else:
             print("Creating new credentials and config files.")
-            self.auth = audible.Authenticator.from_login(
-                self.username, password, locale=country_code, with_username=False
+            # Log in through a real browser so Amazon's own pages handle
+            # verification codes (CVF), 2FA and captchas.
+            self.auth = audible.Authenticator.from_login_external(
+                locale=country_code, with_username=False
             )
             if self.auth is None:
                 print("Invalid credentials. Please try again.")

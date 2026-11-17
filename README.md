@@ -38,10 +38,11 @@ Run:
 python main.py login
 ```
 The command will ask for a few information:
-- Your Audible user name (for some users, this is your Amazon user name)
-- Your Audible password. This will only be used for authenticating to your Audible account.
-- The counry/region of your Audible account.
+- Your Amazon/Audible email. This is only used to label the saved login.
+- The country/region of your Audible account.
 - Your OpenAI API key. If you don't have one, follow [the steps here](https://platform.openai.com/docs/quickstart).
+
+It then prints a login URL. Open it in your browser and sign in to Amazon there. Any verification code, 2FA prompt or captcha is handled on Amazon's own page. After you sign in, the browser shows a "Page not found" error. That's expected: copy the full URL from the address bar and paste it back into the terminal.
 
 ### Get a list of your Audible books
 Run:

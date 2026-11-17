@@ -23,8 +23,9 @@ def check_for_valid_configs():
 
 
 def get_user_info():
-    username = input("Enter your Audible username: ")
-    password = input("Enter your Audible password: ")
+    username = input(
+        "Enter your Amazon/Audible email (only used to label this login): "
+    )
 
     # Mapping of country codes to descriptions
     country_codes = {
@@ -58,7 +59,7 @@ def get_user_info():
 
     openai_key = input("Enter your OpenAI API key: ")
 
-    return username, password, country_code, openai_key
+    return username, country_code, openai_key
 
 
 def main():
@@ -74,7 +75,7 @@ def main():
                 )
                 return
 
-            username, password, country_code, openai_key = get_user_info()
+            username, country_code, openai_key = get_user_info()
 
             transcriber = Transcriber(openai_key=openai_key)
 
@@ -83,9 +84,7 @@ def main():
             if manager.auth is not None:
                 print("You are already logged in.")
             else:
-                manager.authenticate(
-                    username=username, password=password, country_code=country_code
-                )
+                manager.authenticate(username=username, country_code=country_code)
 
             manager.save_library()
         elif command == "list":
