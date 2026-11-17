@@ -58,41 +58,47 @@ fi
 echo "Checking for copyright"
 copyright=$(ffprobe $decrypt "$dir"/*.aax* 2>&1 | grep copyright | sed 's/^.*: //')
 
+# ffmetadata format: one key=value per line, no indentation, and the
+# characters = ; # \ and newline escaped with a backslash.
+jq_esc='def esc: tostring | gsub("(?<c>[\\\\=;#\n])"; "\\\(.c)");'
+
 # Write book metadata
 echo "Writing metadata"
-echo ";FFMETADATA1
-    title=$(echo "$info" | jq -r '.title')
-    artist=$(echo "$info" | jq -r '.authors | [.[].name] | join(", ")')
-    composer=$(echo "$info" | jq -r '.narrators | [.[].name] | join(", ")')
-    year=$(echo "$info" | jq -r '.release_date | sub("-[0-9][0-9]-[0-9][0-9]"; "")')
-    copyright=$copyright
-    language=$(echo "$info" | jq -r '.language')
-    description=$(echo "$info" | jq -r '.merchandising_summary | sub("</?[a-z]+>"; ""; "g")')
-    asin=$asin
-    " >"$chapter_txt"
-
-if [ "$series_info" != '""' ]; then
-    echo "series=$(echo "$series_info" | jq -r '.title')
-        series-part=$(echo "$series_info" | jq -r '.sequence')
-        " >>"$chapter_txt"
-fi
+{
+    echo ";FFMETADATA1"
+    echo "$info" | jq -r --arg copyright "$copyright" --arg asin "$asin" "$jq_esc"'
+        "title=\(.title // "" | esc)",
+        "artist=\([.authors[]?.name] | join(", ") | esc)",
+        "composer=\([.narrators[]?.name] | join(", ") | esc)",
+        "year=\(.release_date // "" | sub("-[0-9][0-9]-[0-9][0-9]$"; "") | esc)",
+        "copyright=\($copyright | esc)",
+        "language=\(.language // "" | esc)",
+        "description=\(.merchandising_summary // "" | gsub("</?[a-z]+>"; "") | esc)",
+        "asin=\($asin | esc)"'
+    if [ "$series_info" != '""' ]; then
+        echo "$series_info" | jq -r "$jq_esc"'
+            "series=\(.title // "" | esc)",
+            "series-part=\(.sequence // "" | esc)"'
+    fi
+} >"$chapter_txt"
 
 # Write chapter timestamps to txt
 echo "Writing chapter timestamps"
 # Only the chapters file: the folder also holds the annotations and transcribed notes JSON.
 json_files=("${dir}"/*-chapters.json)
 if [ ${#json_files[@]} -gt 0 ]; then
-    jq -r 'def flat:
-    reduce .[] as $c ([]; if $c.chapters? then .+[$c | del(.chapters)]+[$c.chapters | flat] else .+[$c] end) | flatten;
-    .content_metadata.chapter_info.chapters
-    | flat
-    | .[] |
-    "[CHAPTER]
-    TIMEBASE=1/1000
-    START=\((.start_offset_ms))
-    END=\((.start_offset_ms + .length_ms))
-    title=\((.title | gsub("\""; "")) | gsub("\\n"; " "))"  # Escaping quotes and newlines
-    "' <"${json_files[0]}" >>"$chapter_txt"
+    jq -r "$jq_esc"'
+        def flat:
+            reduce .[] as $c ([]; if $c.chapters? then . + [$c | del(.chapters)] + [$c.chapters | flat] else . + [$c] end) | flatten;
+        .content_metadata.chapter_info.chapters
+        | flat
+        | .[]
+        | "[CHAPTER]",
+          "TIMEBASE=1/1000",
+          "START=\(.start_offset_ms)",
+          "END=\(.start_offset_ms + .length_ms)",
+          "title=\(.title // "" | esc)"' <"${json_files[0]}" >>"$chapter_txt" ||
+        echo "Warning: could not write chapter markers; continuing without them"
 else
     echo "No chapters file found in $dir"
 fi
