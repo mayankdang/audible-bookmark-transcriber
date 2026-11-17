@@ -1,17 +1,22 @@
 #!/bin/bash
-if [ -z "$(which ffmpeg)" ] || [ -z "$(which audible)" ] || [ -z "$(which jq)" ]; then
+# A failure anywhere in a pipeline (e.g. ffmpeg piped into tee) fails the pipeline.
+set -o pipefail
+# Globs that match nothing expand to nothing instead of the literal pattern.
+shopt -s nullglob
+
+if ! command -v ffmpeg >/dev/null || ! command -v audible >/dev/null || ! command -v jq >/dev/null; then
     echo "Error: Needs ffmpeg, audible-cli, and jq installed"
     exit 1
 fi
 
 # Check for correct usage
 if [[ -z "$1" || -z "$2" ]]; then
-    echo "Usage: ./convert.sh <ASIN> <outFile> [--aax]"
+    echo "Usage: ./audible-convert.sh <ASIN> <outFile> [--aax]"
     audible library list
     exit 1
 fi
 
-ext="${4:-}"
+ext="${3:-}"
 asin="$1"
 script_dir=$(dirname "$0")
 dir="${script_dir}/data/audio/$1"
@@ -26,7 +31,10 @@ else
     aax="--aaxc"
 fi
 
-audible download -a "$asin" "$aax" --cover --cover-size 1215 --chapter --annotation -o "$dir"
+if ! audible download -a "$asin" "$aax" --cover --cover-size 1215 --chapter --annotation -o "$dir"; then
+    echo "Error: audible download failed"
+    exit 1
+fi
 
 info=$(audible api -p response_groups="media,contributors,series,category_ladders" /1.0/library/"$asin" | jq '.item')
 
@@ -34,7 +42,7 @@ chapter_txt="$dir/chapters.txt"
 series_info=$(echo "$info" | jq '.series | if (length > 0) then sort_by(.sequence | if . != "" then tonumber else 0 end) | .[-1] else "" end')
 
 # Check for .voucher files and process them
-voucher_files=(${dir}/*.voucher)
+voucher_files=("${dir}"/*.voucher)
 if [ ${#voucher_files[@]} -gt 0 ]; then
     echo "Preparing to decrypt aacx file"
     key=$(jq -r '.content_license.license_response.key' <"${voucher_files[0]}")
@@ -44,7 +52,7 @@ else
     echo "Preparing to decrypt aax file"
     decrypt="-activation_bytes $(audible activation-bytes)"
 fi
-echo "$decrypt"
+# Never print $decrypt: it holds the book's decryption key or the account's activation bytes.
 
 # Check for copyright information
 echo "Checking for copyright"
@@ -71,7 +79,8 @@ fi
 
 # Write chapter timestamps to txt
 echo "Writing chapter timestamps"
-json_files=(${dir}/*.json)
+# Only the chapters file: the folder also holds the annotations and transcribed notes JSON.
+json_files=("${dir}"/*-chapters.json)
 if [ ${#json_files[@]} -gt 0 ]; then
     jq -r 'def flat:
     reduce .[] as $c ([]; if $c.chapters? then .+[$c | del(.chapters)]+[$c.chapters | flat] else .+[$c] end) | flatten;
@@ -85,14 +94,14 @@ if [ ${#json_files[@]} -gt 0 ]; then
     title=\((.title | gsub("\""; "")) | gsub("\\n"; " "))"  # Escaping quotes and newlines
     "' <"${json_files[0]}" >>"$chapter_txt"
 else
-    echo "No JSON file found in $dir"
+    echo "No chapters file found in $dir"
 fi
 
 # Reencode the file with ffmpeg
 if [ ! -f "$dir/$2" ]; then
     echo "Reencoding file"
     # Save as mp4 and route the output for Python to capture
-    ffmpeg $decrypt \
+    ffmpeg -nostdin $decrypt \
         -y -i "$dir"/*.aax* -i "$dir"/*.jpg -i "$chapter_txt" \
         -map 0:a -map 1:v -map_metadata 2 -map_chapters 2 -c:v copy \
         -c:a aac \
@@ -100,7 +109,15 @@ if [ ! -f "$dir/$2" ]; then
         -disposition:v attached_pic -movflags +faststart -movflags +use_metadata_tags \
         -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" \
         -metadata:s:a language="$(echo "$info" | jq -r '.language | .[0:3]')" \
-        "$dir/tmp_$2" 2>&1 | tee ffmpeg_output.log
+        "$dir/tmp_$2" 2>&1 | tee "$dir/ffmpeg_output.log"
+
+    # Don't keep a half-written file under the final name: later runs would
+    # skip reencoding and cut clips from broken audio.
+    if [ $? -ne 0 ]; then
+        echo "Error: ffmpeg failed, see $dir/ffmpeg_output.log"
+        rm -f "$dir/tmp_$2"
+        exit 1
+    fi
 
     echo "Finished reencoding file, renaming file"
     mv "$dir/tmp_$2" "$dir/$2"

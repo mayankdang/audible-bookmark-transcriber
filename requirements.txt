@@ -1,4 +1,7 @@
-openai
-audible
-audible-cli
-toml
+# Pinned to versions known to work together. Unpinned installs pull whatever
+# is newest, which can break the tool or bring in an unreviewed release.
+openai==3.52.0
+audible[cryptography]==0.13.1
+cryptography==50.0.2
+audible-cli==0.6.0
+toml==0.10.2
